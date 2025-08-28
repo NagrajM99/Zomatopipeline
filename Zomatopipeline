@@ -4,69 +4,49 @@ pipeline {
         nodejs 'node16'
     }
     environment {
-        SCANNER_HOME=tool 'sonar-server'
+        SCANNER_HOME=tool 'sonar'
     }
+
     stages {
-        stage ("clean workspace") {
+        stage('CleanWs') {
             steps {
                 cleanWs()
             }
         }
-        stage ("Checkout from Git") {
+        stage("Code") {
             steps {
-                git branch: 'main', url: 'https://github.com/NagrajM99/Zomato-Project.git'
+                git "https://github.com/NagrajM99/Zomato-Project.git"
             }
         }
-        stage("Sonarqube Analysis") {
-            steps{
-                withSonarQubeEnv('mysonar') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=zomato \
-                    -Dsonar.projectKey=zomato '''
+        stage("Code Quality Analysis") {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh "$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=Reactapp -Dsonar.projectName='Reactapp'"
                 }
             }
         }
-        stage ("quality gate") {
+        stage("Install Dependencies") {
+            steps {
+                sh "npm install"
+            }
+        }
+        stage("D Image Build") {
+            steps {
+                sh 'docker build -t nagrajm99/clvt:zomatoimage1 .'
+            }
+        }
+        stage("Image push") {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-Token'
-                }
-            }
-        }
-        stage ("Install dependencies") {
-            steps {
-                sh 'npm install'
-            }
-        }
-        stage ("OWASP FS SCAN") {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        stage ("TRIVY FS SCAN") {
-            steps {
-                sh "trivy fs . > trivyfs.txt"
-            }
-        }
-        stage("Docker Build & Push"){
-            steps{
-                script{
-                    withDockerRegistry(credentialsId: 'docker-password') {
-                        sh 'docker build -t image1 .'
-                        sh "docker tag image1 shaikmustafa/loki:mydockerimage"
-                        sh "docker push shaikmustafa/loki:mydockerimage"
+                    withDockerRegistry(credentialsId: 'dockerhub') {
+                        sh 'docker push nagrajm99/clvt:zomatoimage1'
                     }
                 }
             }
         }
-        stage ("TRIVY") {
+        stage("Deploy") {
             steps {
-                sh 'trivy image shaikmustafa/loki:mydockerimage'
-            }
-        }
-        stage ("Deploy to container") {
-            steps {
-                sh 'docker run -d --name zomato -p 3000:3000 shaikmustafa/loki:mydockerimage'
+                sh 'docker run -itd --name cont1 -p 1111:3000 nagrajm99/clvt:zomatoimage1'
             }
         }
     }
